@@ -1,0 +1,97 @@
+<!doctype html>
+
+<html lang="ja">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  </head>
+  
+  <head>
+    <title>営業所用</title>
+    <style>
+     input.x-natural,
+     input.x-int,
+     input.x-real0,
+     input.x-real00 {
+	 text-align: right;
+     }
+     span.err-mess {
+	 font-size: 80%;
+	 color: red;
+     }
+    </style>
+  </head>
+  <body>
+    <article id="sample">
+      <div class="container">
+
+	<span name="xh-idno" class="x-id"></span>
+
+	<label><span>営業所</span>
+	  <div>
+	    <div style="display:flex; flex-direction:column; width:20rem;">
+	      <input name="xh-eigyousyo(3)" class="x-fkey x-not-null" readonly placeholder="検索"> <span class="err-mess"></span>
+	    </div>
+	  </div>
+	</label>
+	<br>
+	
+	<label><span>作業所コード</span>
+	  <div>
+	    <div style="display:flex; flex-direction:column; width:10rem;">
+	      <input name="xh-code" class="x-han x-not-null" format="/^...$/" placeholder="入力"> <span class="err-mess"></span>
+	    </div>
+	  </div>
+	</label>
+	<br>
+
+	<label><span>作業所名</span>
+	  <div>
+	    <div style="display:flex; flex-direction:column; width:20rem;;">
+	      <input name="xh-nm" class="x-str x-not-null" placeholder="入力"> <span class="err-mess"></span>
+	    </div>
+	  </div>
+	</label>
+	<br>
+	
+	<label><span>削除フラグ</span>
+	  <div>
+	    <div style="display:flex; flex-direction:column; width:4rem;">
+	      <input name="xh-del" type="checkbox" class="x-not-null" placeholder="入力"> <span class="err-mess"></span>
+	    </div>
+	  </div>
+	</label>
+	<br>
+	
+      	<div class="mt-1">
+          <button type="button" name="del" class="btn btn-sm btn-warning">削除</button>	
+          <button type="button" name="new" class="btn btn-sm btn-primary">新規</button>
+          <button type="button" name="search" class="btn btn-sm btn-primary">検索</button>
+          <button type="button" name="register" class="btn btn-sm btn-primary">登録</button>
+        </div>
+	
+
+      </div><!-- container -->
+    </article>
+    
+    <div class="container" name="preview" style="background:white;"></div>
+    
+  </body>
+  
+  <!-- Optional JavaScript -->
+  
+  <script src="https://code.jquery.com/jquery-3.4.1.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+  
+  <script type="text/javascript" src="config.js"></script>
+  <script type="text/javascript" src="all.js"></script>  
+  <script type="text/javascript" src="lisp2.js"></script>
+  <script>
+   jQuery(function() {
+     start_lisp(__all__); // load your program
+     _G.funcall("lisp-init"); // only if you want to call some lisp function
+   });     
+  </script>
+  
+  
+</html>
