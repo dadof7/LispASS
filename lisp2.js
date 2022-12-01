@@ -3,7 +3,7 @@
 // ********************
 
 // Lisp interperter in Javascript by M. Ishikawa
-// ISL Inc. Toyohashi JAPAN 2020-2022
+// This lisp is based on the work of Yuumi Yoshida at EY-office.com.
 
 // *** GLOBAL VAR
 var _G = new function() {

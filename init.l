@@ -8,12 +8,6 @@
        (list 'progn (list 'setq m (list 'quote (list 'macro params (if (< 1 (length body)) (cons 'list (cons ''progn body)) (car body)))))
 	     (list 'quote m)))))
 
-;; (defmacro defun (f params &rest body)
-;;   (let ((n (length body))
-;; 	(test (check-fp params))
-;; 	)
-;;     (list 'progn (list 'setq f (list 'quote (list 'lambda f params (if (< 1 n) (cons 'progn body) (car body)))))
-;; 	  (list 'quote f))))
 (defmacro defun (f params &rest body)
   (check-fp params)
   (if (and (= :desc (car body)) (stringp (car (cdr body))))
@@ -137,13 +131,6 @@
 (defun js-tf (p)
   (if p js-true js-false))
 
-(setq *regex-pool* nil)
-(defun js-regex (x)
-  (or (av x *regex-pool*)
-      (let1 regex (js-safe-eval x)
-	(setq *regex-pool* (cons (cons x regex) *regex-pool*))
-	regex)))
-
 (defmacro js-foreach (i a &rest expr) `(foreach ,i (range (,a :length>)) (let ((,i (,a : ,i))) ,@expr)))
 (setq foreach-a js-foreach)
 
@@ -204,9 +191,6 @@
   ;; inside expr.., (resolve value) or (reject reason) can be used
   `(js-new Promise (wrap (fun (this resolve reject) ,@args))))
 
-;; *** 現在の実装の都合上promiseの返す値valueは２度評価されてしまう
-;; よってlispオブジェクトは避けて、javascriptの世界のものを返すように
-;; これは直したので問題なくなったような気がする
 (defmacro then (p &rest args)
   `(,p :then (wrap (fun (this value) ,@args))))
 
@@ -222,113 +206,9 @@
 	 ,catch-exp)
      ,finally-exp))
 
-(defun table-set (tbl &optional (pretty-print nil))
-  (let ((N (length tbl))
-	hd
-	width-alist
-	acc-alist
-	2str
-	)
-    (defun 2str (x)
-      (cond ((= js-null x) "#NULL#")
-	    ((null x) "nil")
-	    (t (string< x))))
-
-    (setq hd (foreach i (car tbl)
-	       (car i)))
-
-    (setq width-alist ; ヘッダ文字列長に初期化
-      (foreach i hd
-	(cons i (sjis-len (2str i)))))
-
-    (setq acc-alist ; 合計リスト初期化
-      (foreach i hd
-	(cons i 0)))
-
-    (foreach row tbl
-      (foreach col row
-	(let* ((fs (car col))
-	       (fv (cdr col))
-	       (fvstr (2str fv))
-	       (c1 ((2str fs) :0>))
-	       (sz (if (and pretty-print (= "$" c1))
-		       (sjis-len (-> (num< fvstr) :toLocaleString))
-		     (sjis-len fvstr)))
-	       (maxsz (av fs width-alist))
-	       )
-	  (if (< maxsz sz)
-	      (cdr! (assoc fs width-alist) sz)))))
-
-    (prln)
-    (foreach i hd
-      (let* ((n (av i width-alist))
-	     (sz (sjis-len (2str i)))
-	     (sps (- n sz))
-	     (hdstr (2str i))
-	     )
-	(pr hdstr)
-	(foreach j (range sps)
-	  (pr " "))
-	(pr "|")))
-
-    (prln)
-    (foreach i hd
-      (let* ((n (av i width-alist))
-	     (c1 (i :0>))
-	     (moneyf (and pretty-print (= "$" c1)))
-	     (rjustf (and pretty-print (= ">" c1)))
-	     )
-	(if (or moneyf rjustf)
-	    (pr ("-" :repeat (1- n)) ":")
-	  (pr ("-" :repeat n)))
-	(pr "|"))) ; +
-    (prln)
-    (foreach row tbl
-      (foreach col row
-	(let* ((fs (car col))
-	       (fv (cdr col))
-	       (c1 ((2str fs) :0>))
-	       (maxsz (av fs width-alist))
-	       (moneyf (and pretty-print (= "$" c1)))
-	       (fvstr (if moneyf
-			  (-> (num< fv) :toLocaleString)
-			(2str fv)))
-	       (sz (sjis-len fvstr))
-	       (spaces (" " :repeat (- maxsz sz)))
-	       )
-	  (if moneyf
-	      (progn
-		(pr spaces fvstr)
-		(cdr! (assoc fs acc-alist) (+ (num< fv) (av fs acc-alist)))
-		)
-	    (pr fvstr spaces))
-	  (pr "|")
-	  ))
-      (prln))
-    (if *SQL-STAT* nil (prln))
-    (pr (+ "<!-- EOT:" N "件"))
-    
-    (foreach i acc-alist ; 合計表示
-      (let* ((fs (car i))
-	     (fv (cdr i))
-	     (c1 (fs :0>))
-	     (moneyf (and pretty-print (= "$" c1)))
-	     )
-	(if moneyf (pr " " fs "=" (-> (num< fv) :toLocaleString))) ; 金額のみ合計表示
-	))
-    (prln " -->")
-    ))
-
 (defmacro for (i a b &rest expr)
   `(foreach ,i (range ,a ,b)
      ,@expr))
-
-(defun sha-256 (txt &rest args) ; many times
-  (let1 sha (js-safe-eval "new jsSHA(\"SHA-256\",\"TEXT\")")
-    (sha :update txt)
-    (foreach a args
-      (sha :update (string< a)))
-    (sha :getHash "HEX")))
 
 (defun append (a b)
   (if (null a) b
@@ -375,50 +255,6 @@
 
 (defun alist-guess+ (x)
   (and (listp x) (listp (car x)) (symp (car (car x)))))
-
-(defun mk-struct (x &optional context)
-  (if (null context)
-      (cond ((null x) (js-safe-eval "[]"))
-	    ((and (listp x) (= (length x) 1) (null (car x))) (js-safe-eval "{}"))
-	    ((symp x) (js-log x) (throw "symbol can't be included"))
-	    ((= (js-typeof x) "undefined") js-null)
-	    ((atom x) x)
-	    ((alist-guess+ x) (mk-struct x (js-safe-eval "{}")))
-	    ((listp x) (mk-struct x (js-safe-eval "[]")))
-	    (t (js-log x) (throw "unknown structure"))
-	    )
-    (cond ((null x) context)
-	  ((js-isArray context)
-	   (context :push (mk-struct (car x)))
-	   (mk-struct (cdr x) context))
-	  ((alist-guess+ x)
-	   (context (intern (+ ":" (string< (car (car x))) "<")) (mk-struct (cdr (car x))))
-	   (mk-struct (cdr x) context))
-	  (t (throw "unknown structure"))
-	  )))
-
-
-(defun json-test ()
-  (let ((x (js-safe-eval "{}"))
-	(header ())
-	f-done
-	f-fail)
-    (x :url< (+ *json-url* "/page0"))
-    (x :type< "POST")
-    (x :data< (mk-struct `((jsonData . ,(json-string< (mk-struct '("これは" "テスト" "です" ".")))))))
-    (x :contentType< "application/JSON")
-    (x :dataType< "json")
-    (x :scriptCharset< "utf-8")
-    (defun f-fail (this)
-      (prln "ajax失敗"))
-    (defun f-done (this data)
-      (foreach-a row data
-	(prln)
-	(foreach-a col row
-	  (pr col ",")))
-      (prln))
-    ((($ :ajax x) :done (wrap f-done)) :fail (wrap f-fail))))
-
 
 (defun 1+ (x) (+ x 1))
 (defun 1- (x) (- x 1))
@@ -552,240 +388,6 @@
   (let1 ll (if p (cons initial-value l) l)
     (if (null (cddr ll)) (apply f ll) ; 引数が2つ以下なら
       (reduce f (cons (f (car ll) (cadr ll)) (cddr ll))))))
-
-
-;;; ================
-;;; DB関連
-;;; ================
-;; ログインシーケンス
-;; login> => ワンタイム値を得る => db-set-hashでpasswdのハッシュ値をセット =>　db-update-hashでワンタイム値を加える
-(defun db-connect (uid)
-  ;; queryやsqlで使うdb connecitonを返す
-  (let2 user-id uid
-	hpass "anything will do" ;  ログイン時にはハッシュ値をチェックしない
-    (js-new (js-window :DbConn>) user-id hpass)
-    ;;(js-new (:_G:DbConn>) user-id hpass)
-    ))
-
-;; connにパスワードのハッシュ値をセットする
-(defun db-set-hash (conn pass)
-  (conn :hashed_pass< (sha-256 pass))
-  )
-
-;; ログイン後サーバーが返すone-time-valをハッシュに加える
-(defun db-update-hash (conn one-time-val)
-  (let1 new-hash (sha-256 (cat (*conn* :hashed_pass>) one-time-val))
-    (conn :hashed_pass< new-hash)))
-
-(defun query (conn stmt &rest parms)
-  ;; パラメータ付きクエリを非同期実行し、結果のpromiseを返す
-  (let ((x (js-safe-eval "{}"))
-	f-done
-	f-fail
-	(user-id (conn :id_str>))
-	(hpass (conn :hashed_pass>))
-	)
-    (x :url< (+ *json-url* "/sql"))
-    (x :type< "POST")
-    
-    (let* ((jstr (json-string< (mk-struct `( ; (user . ,user-id) ; jsonの外で渡すことにした
-					    (parms . ,parms)
-					    (sql . ,stmt)))))
-	   (hash (sha-256 hpass jstr))
-	   )
-      (x :data< (js-eval "{jsonData:ARGS[1],hash:ARGS[2],user:ARGS[3]}" jstr hash user-id)))
-    
-    (x :contentType< "application/JSON")
-    (x :dataType< "json")
-    (x :async< js-true)
-    (x :timeout< *json-timeout*) ; ms
-    (x :scriptCharset< "utf-8")
-    
-    (defun f-fail (this)
-      (prln "<!-- ajax failed -->")
-      (reject "ajax失敗"))
-    (defun f-done (this data)
-      (prln "<!-- ajax succeeded -->")
-      (resolve data))
-
-    ;; connのプロミスを書き換えて、promiseを返す
-    ;; ここでのプロミスの挙動: pがプロミスだと仮定する
-    ;; (catch p ...) ; pがfailしていなければ渡されたpがそのまま返る
-    ;; (then p expr) ; pが成功していれば、新しいプロミスが作られ、そのvalueはexprとなる
-    (conn :p<
-	  (then (conn :p>)
-	    (let1 p (promise ((($ :ajax x) :done (wrap f-done)) :fail (wrap f-fail)))
-	      (catch p (if (assoc 'bp-system-alert (env))
-			   (bp-system-alert "エラー" (format "{0}: ネットワークの障害が発生した可能性があります.ネットワーク接続、WEBサーバーの状態を確認してください." reason))))
-	      )))
-    ))
-
-(setq *SQL-STAT* t) ; 統計的な情報を出力するかどうかのスイッチ
-(defun sql (conn stmt &rest parms)
-  ;; SQL実行例
-  ;; (sql conn "select * from table where id=?" 3)
-  ;; 文頭に!で全行フェッチ、無い場合は最初の201行のフェッチ
-  ;; 結果はpromiseで、thenで受けた時そのvalueはjavascriptの辞書型データで
-  ;; sql文の内容によって異なる
-  ;; 1) 通常の表が返ってくるsql文では
-  ;; {mess: ["OK"], rows: Array, columns: ["id", "code", "shimei", "priority", "seikankbn"], types: ["<class 'int'>", "<class 'str'>", "<class 'str'>", "<class 'int'>", "<class 'int'>"], byte_sizes: [10, 16, 64, 10, 10], …}
-  ;; 2) begin、rollbackなど
-  ;; {mess: "[BEGIN]"}
-  ;; {mess: "[ROLLBACK]"}
-  ;; 3) 表の返らないdelete、update、insertなど
-  ;; {mess: "[OK]"}
-  ;; 4) DBエラーの場合、mess配列にエラーメッセージが入る
-  ;; {mess: ["<class 'pyodbc.ProgrammingError'>", "42P01", "[42P01] ERROR: relation \"workerss\" does not exist;…or while executing the query (1) (SQLExecDirectW)"]}
-  ;; 5) DB以外のエラーが起こるとconnectionは一旦切断される
-  (let (p
-	typ-str
-	a-list
-	b-list
-	)
-    (defun typ-str (x)
-      (cond ((= "<class 'decimal.Decimal'>" x) "DEC")
-	    ((= "<class 'datetime.datetime'>" x) "DTTM")
-	    ((= "<class 'datetime.date'>" x) "DT")	    
-	    ((= "<class 'str'>" x) "STR")
-	    ((= "<class 'float'>" x) "FLOAT")
-	    ((= "<class 'int'>" x) "INT")
-	    (t x)))
-    (setq p (apply query conn stmt parms))
-    (then p
-      (if (=== (value :rows>) void0)
-	  (progn
-	    (prln (value :mess>))
-	    value
-	    )
-	(setq *ROWS* (value :rows>)) ; 開発用にテンポラリに保存
-	(setq a-list (foreach-a row (value :rows>)
-		       (for i 0 (row :length>)
-			 (cons ((value :columns>) : i) (row : i)))))
-	(setq b-list
-	  (append
-	   (foreach col '(":types>")
-	     (cons (cons 'attr/col col)
-		   (for i 0 (length (value :columns>))
-		     (cons ((value :columns>) : i) (typ-str ((value (intern col)) : i))))))
-	   (foreach col '(":byte_sizes>" ":precisions>" ":scales>" ":nullables>")
-	     (cons (cons 'attr/col col)
-		   (for i 0 (length (value :columns>))
-		     (cons ((value :columns>) : i) ((value (intern col)) : i)))))))
-	(table-set a-list t)
-	
-	(if *SQL-STAT*
-	    (prln "* ROWS are limited: " (value :limited>))
-	  (prln "<div style='page-break-before:always'></div>"))
-
-	(if *SQL-STAT*
-	    (let* ((index-row-0
-		    (cons (car (car (car b-list))) ":index>"))
-		   (index-row-rest
-		    (foreach i (enum-dot (cdr (car b-list)))
-		      (cons (nth 2 i) (1+ (nth 1 i)))))
-		   (index-row (cons index-row-0 index-row-rest))
-		   )
-	      (table-set (cons index-row b-list))
-	      (prln "* Current package " (pwp))))
-	value
-	))))
-
-
-(defmacro timeout (msec &rest exprs)
-  `((js-window :setTimeout>) (wrap (fun () ,@exprs)) ,msec))
-
-(defmacro delay (ms &rest exprs)
-  ;; (delay 1000 (prln "hoi"))
-  `(let1 f (fun (this) (resolve (progn ,@exprs)))
-     (promise (js-window :setTimeout (wrap f) ,ms))))
-
-;; fがENV:fの形である前提で、(defun f (parms) (w/ ENV:env body))のように
-;; 環境付きで評価されるように展開される
-(defmacro defun* (f parms &rest body)
-  (let1 m ((string< f) :match (js-regex "/^([^:]+):[^:]+$/"))
-    (if (= m js-null) (throw (+ "defun*: " (string< f) " not in ENV:" (string< f) " format"))
-      `(defun ,f ,parms (w/ ,(intern (+ (m :1>) ":env")) ,@body)))))
-
-
-(defun chain/pp (o &rest operators)
-  ;; (chain/pp dset :rows> :1> :2> :length>)
-  ;; js propertyのチェーン評価
-  (foreach i operators
-    (setq o (o i)))
-  o)
-
-
-(defmacro defun-in-environment (e f params &rest exprs)
-  ;; 応用する時の注意
-  ;; (with *env* (wrap f)) ; 正
-  ;; (wrap (with *env* f)) ; 誤
-  (if (assoc f (eval e))
-      `(with ,e (defun ,f ,params ,@exprs))
-    `(progn
-       (setq ,e (cons '(,f) ,e))
-       (with ,e (defun ,f ,params ,@exprs)))))
-
-(defmacro setq-in-environment (e f &optional expr)
-  (if (assoc f (eval e))
-      `(with ,e (setq ,f ,expr))
-    `(progn
-       (setq ,e (cons '(,f) ,e))
-       (with ,e (setq ,f ,expr)))))
-
-(defmacro defun/e (f parms &rest exprs)
-  (let1 jsa ((string< f) :split ":")
-    (if (/= 2 (length jsa)) (throw (+ "defun/e: wrong function name format: " (string< f)))
-      (let ((ee (intern (jsa :0>)))
-	    (ff (intern (jsa :1>))))
-	`(defun-in-environment ,ee ,ff ,parms ,@exprs)))))
-
-(defmacro setq/e (var &optional val)
-  (let1 jsa ((string< var) :split ":")
-    (if (/= 2 (length jsa)) (throw (+ "setq//e: wrong symbol name format: " (string< var)))
-      (let ((ee (intern (jsa :0>)))
-	    (vname (intern (jsa :1>))))
-	`(setq-in-environment ,ee ,vname ,val)))))
-
-(defmacro let~ (symL valExprL &rest exprs)
-  ;; (macroexpand '(let~ (a b c) '(1 2 3) (* a 2)))
-  (append
-   (list 'let
-	 (let1 vals (eval valExprL)
-	   (foreach i symL
-	     (let1 x (list i (car vals))
-	       (setq vals (cdr vals))
-	       x))))
-   exprs))
-
-
-(defmacro setq~ (symL valExprL)
-  ;; (macroexpand '(setq~ (a b c) '(1 2 3)))
-  ;; 展開後 (progn (setq a 1)... となり
-  ;; 1,2,3はそれぞれ評価されてしまうので注意
-  (cons 'progn
-	(let1 vals (eval valExprL)
-	  (foreach i symL
-	    (let1 x (list 'setq i (car vals))
-	      (setq vals (cdr vals))
-	      x)))))
-
-
-(defmacro w// (aa &rest exprs)
-  ;; 環境継承用のw/
-  ;; このlispにはクラスの継承は無いが、環境の連鎖で真似できる.
-  ;; w/で環境は1つしか書けないが、w//では環境のリストaaを取る.
-  ;; aaは通常環境を表すシンボルのリストで各要素は実行時に評価されalistにならなければならない.
-  ;; (w// aa exprs...) where aa is in form of (symbol1 symbol2 ...)
-  ;; 例:
-  ;; (setq A '((a . 1) (b . 2)))
-  ;; (setq B '((x . 5) (y . 3)))
-  ;; (setq aa '(A B)) ; Bが親でAが子
-  ;; (w// aa (* x a)) => 5
-  `(w/ (reduce (fun (a b) (append a (eval b))) ,aa nil) ,@exprs))
-
-(defun test (should-be-true)
-  (if should-be-true 'test-OK
-    (throw "test: failed")))
 
 ;; 全角を2, 半角を1として文字数をカウント
 (defun sjis-len (ss)
